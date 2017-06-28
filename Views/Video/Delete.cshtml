@@ -1,0 +1,72 @@
+﻿@model JimRadioMaint.Models.Video
+
+@* For class VideoHelper: *@
+@using JimRadioMaint
+
+@* For Web.Config settings: *@
+@using System.Web.Configuration;
+
+@{
+    ViewBag.Title = "Delete " + Model.youtube_title;
+}
+
+<h2>Delete</h2>
+
+<h3>Are you sure you want to delete this?</h3>
+
+<table id="DeleteTable">
+
+	<tr valign="top"> 
+
+	     <td width="500">
+            <fieldset>
+
+                <legend>Video</legend>
+
+                    <div class="display-label">
+                        <strong>@Html.LabelFor(model => model.youtube_title)</strong>
+                    </div>
+
+                    <div class="display-field">
+                        @Html.DisplayFor(model => model.youtube_title)
+                    </div>
+
+                    <div class="display-label">
+                        <strong>@Html.LabelFor(model => model.youtube_id)</strong>
+                    </div>
+
+                    <div class="display-field">
+                        @Html.DisplayFor(model => model.youtube_id)
+                    </div>
+
+                    <div class="display-label">
+                        <strong>@Html.LabelFor(model => model.duration_seconds)</strong>
+                    </div>
+ 
+                    <div>
+                        @VideoHelper.DurationMinutesSeconds(Model.duration_seconds)            
+                    </div>
+
+            </fieldset>
+	    </td>
+
+	    <td>
+            <img src="@Url.Content(@WebConfigurationManager.AppSettings[
+                "YOUTUBE_IMAGE_URL_PREFIX"] + @Html.DisplayFor(model => model.youtube_id) + "/0.jpg")"
+                alt="YouTube's image for this video." height="240" width="240" />
+	    </td>
+
+	</tr>
+
+</table>  
+
+
+@using (Html.BeginForm())
+{
+    <p>
+        <input type="submit" value="Delete" />
+        <br/>
+        <br/>
+        @Html.ActionLink("Back to List", "Index")
+    </p>
+}
