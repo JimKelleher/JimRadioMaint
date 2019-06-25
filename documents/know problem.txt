@@ -1,0 +1,48 @@
+
+This application, as regards Nuget packages, is corrupt.  I deduce this
+since the problem occurred under Visual Studio 2010 and 2015 and
+remained after a re-install of Visual Studio 2015.
+
+The app once had a solution inside the code directory and now has one
+outside of it.  Either way, the problem persisted.  
+
+Attempts to update packages from Nuget all hang.  Attempts to upgrade
+from MVC 3 to MVC 4 failed due to this.  An attempt to create a new MVC 4
+app and port over the old code was a can of worms that hung up on accessing
+the Entity Framework elements "Table" and "Schema".
+
+I wasted 2 days on this and have now declared upgrading any aspect of this
+application to be frozen.
+
+NOTE: MVC is, itself, a can of worms and the DLLs have moved around in
+ownership, from "public" (?) to "microsoft"...
+
+There is a lot NOT to like about MVC, not least all this bullshit.
+
+--------------------------------------------------------------------------
+
+packages.config
+
+Intellisense error: The "packages" element is not declared
+
+<?xml version="1.0" encoding="utf-8"?>
+<packages>
+  <package id="EntityFramework" version="4.2.0.0" />
+  <package id="jQuery" version="1.5.1" />
+  <package id="jQuery.UI.Combined" version="1.8.11" />
+  <package id="jQuery.Validation" version="1.8.0" />
+  <package id="jQuery.vsdoc" version="1.5.1" />
+  <package id="Modernizr" version="1.7" />
+</packages>
+
+--------------------------------------------------------------------------
+
+NOTE: The MVC objects "@model" and "@ViewBag" also show intellisense
+errors yet the program still works.  This is, probably, since I have the DLLs.
+The "corruption" may just extend to intellisense....
+
+
+
+
+
+

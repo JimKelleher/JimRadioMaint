@@ -1,0 +1,538 @@
+﻿@model IEnumerable<JimRadioMaint.Models.Video>
+
+@* For class VideoHelper: *@
+@using JimRadioMaint;
+
+@* For Web.Config settings: *@
+@using System.Web.Configuration;
+
+@{  
+    ViewBag.Title = "JimRadio Database Maintenance";
+
+    string genreAsString = ViewBag.genre;
+    string searchCriteriaAsString = ViewBag.searchCriteria;
+
+    // Cast and convert:
+    string ratingAsString = ViewBag.rating.ToString();
+    if (ratingAsString == "0") { ratingAsString = ""; }
+}
+@{
+    //--------------------------------------------------------------------------------------------
+    // DISABLING VISITOR EMAIL NOTE 1 of 2: This setting is stored in a browser cookie and covers
+    // only that browser on my cell phone since the IP address varies every time I use it:
+
+    // Look for the presence of this cookie.
+    // NOTE: It is created in the SetCookie() event of form CookieVisitorIsDeveloper.aspx
+    HttpCookie cookie = Request.Cookies["VisitorIsDeveloper"];
+
+    String strVisitorIsDeveloper = "N"; // init
+
+    // If the cookie exists:
+    if (cookie != null)
+    {
+        // NOTE: This can only equal "Y":
+        strVisitorIsDeveloper = cookie.Value.ToString();
+    }
+
+    //---------------------------------------------------------------------------
+    // Utilize Host Services for processing done by all applications:
+
+    // Init the WorkingWeb host services class:
+    WorkingWebHostServices workingWebHostServices = new WorkingWebHostServices();
+
+    // Perform standard start-up processing, passing the name of the application:
+    workingWebHostServices.PageLoadInit("JimRadio Database Maintenance", strVisitorIsDeveloper);
+
+    //---------------------------------------------------------------------------
+}
+
+<div id="javascript_message">
+    You need JavaScript enabled to view this web page properly.<br /><br />
+</div>
+
+<table border="0">
+
+    <tr>
+        <th class="AccentColor">
+            Genre
+        </th>
+        <th class="AccentColor">
+            Rating
+        </th>
+        <th>
+            <span class="UnboldHeaderFont">Enter </span><span class="AccentColor">Search Criteria
+            </span><span class="UnboldHeaderFont">separated by commas</span>
+        </th>
+        <th>
+        </th>
+    </tr>
+
+    <tr valign="top">
+        <td>
+            @Html.DropDownList("retrieve_genre",
+                new SelectList(ViewBag.Genres, "code_value", "code_description"), "select")
+        </td>
+
+        <td>
+            @Html.DropDownList("retrieve_rating",
+                new SelectList(ViewBag.Ratings, "code_value", "code_description"), "select")
+        </td>
+
+        <td>
+            <textarea id="searchCriteria" cols="24" rows="1">@searchCriteriaAsString</textarea>
+            <br />
+
+            <input id="ButtonRetrieve" type="button" onclick="ButtonRetrieve_onclick()" value="Retrieve" />
+            <input id="ButtonSelectAll" type="button" onclick="ButtonSelectAll_onclick()" value="Select All" />
+            <input id="ButtonPlay" type="button" onclick="ButtonPlay_onclick()" value="Play" />
+
+            @* NOTE, Part 1 of 2: Play button processing dynamically constructs the appropriate URL to play the
+               desired songs.  However, attempts to do so in JavaScript ran up against problems with the general
+               purpose VAR "datatype".  Invariably, content that began with "http://" (the inclusion of which is
+               necessary so that the link is not "hijacked" by MVC) was somehow being casted to a URL "datatype"
+               and all attempts to impose order, in the form of the proper quotation marks, failed. This hidden
+               hyperlink, whose URL (href) can be set simply by strings, serves as my work-around: *@
+            <a href="" id="PlayButtonURL" target="_blank"></a>
+
+        </td>
+
+        <td class="InstructionsSmallFont">
+
+            <span class="InstructionsSmallFontBold">Instructions</span><br/>
+            1) Select <span class="AccentColor">Genre</span> (optional)<br />
+            2) Select <span class="AccentColor">Rating</span> (optional)<br />
+            3) Enter <span class="AccentColor">Search Criteria</span> (optional)<br />
+            4) Push the Retrieve button<br />
+        </td>
+
+    </tr>
+
+</table>
+
+<div id="messageArea" class="MessageAreaSmallFont">
+</div>
+
+<script type="text/javascript">
+
+    // NOTE: If we have gotten this far, it means that JavaScript is enabled.  Hide this:
+    document.getElementById("javascript_message").style.display = "none";
+
+    // State-management toggle variable, initialized:
+    var selectAll = 'N';
+
+    // Since javascript doesn't have a trim(), we will create our own:
+    String.prototype.trim = function ()
+    {
+        return this.replace(/^\s+|\s+$/g, "");
+    };
+
+    // Convey "state management" info about the current run to the user, ie,
+    // what run parameters were passed:
+    document.getElementById("retrieve_genre").value = "@genreAsString";
+    document.getElementById("retrieve_rating").value = "@ratingAsString";
+
+    // NOTE: If the user presses, for example, Select All, at least 4000 videos can be selected in about
+    // one second using Chrome.  Internet Explorer has well-known performance constraints when accessing
+    // the DOM, resulting in approximately one minute of selection time in the scenario previously
+    // mentioned.  This pathetically slow performance causes the user to think that the process has crashed.
+    
+    // Below the following threshold, the problem is not noticeable:
+    var IE_SLOW_DOM_THRESHOLD = 500;
+
+    // If the user is using Internet Explorer...
+    if (navigator.appName == 'Microsoft Internet Explorer') {
+
+        // ... and the result set is over the threshold...
+        if (@Model.Count() > IE_SLOW_DOM_THRESHOLD) {
+
+            // Put up a red message warning the user of the expected performance degradation:
+            var messageArea = document.getElementById('messageArea');
+            messageArea.innerHTML = 'Slow Browser Alert: Due to Internet Explorer\'s slow JavaScript performance, Select All and Play processing run slowly (one second in Chrome vs. on minute in I.E.!).  Please wait patiently after selecting those options.';
+        }
+    }
+
+    function ButtonRetrieve_onclick()
+    {
+        // Get the user-entered retrieval parameters:
+        var genre = document.getElementById('retrieve_genre').value;
+        var rating = document.getElementById('retrieve_rating').value;
+        var searchCriteria = document.getElementById('searchCriteria').value;
+
+        // These are the parameter processing variables:
+        var controllerCallPrefix = "Video";
+        var queryStringPrefix = "?";
+        var controllerCallUrl = "";
+
+        var titles = new Array();
+
+        // Init:
+        controllerCallUrl = controllerCallPrefix;
+
+        // Examine the parameters that were passed and use them to construct a URL
+        // which will call the Index method, passing them as a query string:
+
+        // Construct that query sting:
+        //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+        if (genre != "")
+        {
+            // Build the query string.  NOTE:  The format is:
+            // Video?genre=ROCK
+            // and...
+
+            // ... append it to the final URL:
+            controllerCallUrl += queryStringPrefix + "genre=" + genre;
+
+            // Prep for the next time through:
+            queryStringPrefix = "&";
+        }
+
+        //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+        if (rating != 0)
+        {
+            // Build the query string.  NOTE:  The format is:
+            // Video?rating=3
+            // and...
+
+            // ... append it to the final URL:
+            controllerCallUrl += queryStringPrefix + "rating=" + rating;
+
+            // Prep for the next time through:
+            queryStringPrefix = "&";
+        }
+
+        //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+        if (searchCriteria != "")
+        {
+            // Build the query string.  NOTE:  The format is:
+            // Video?titles[0]=bent&titles[1]=zero
+            // and...
+
+            // ... cleanup, and...
+            searchCriteria = searchCriteria.trim();
+
+            // ... remove trailing commas, and...
+            while (searchCriteria.search(/,$/) > -1)   // "," - what we are searching for          
+            {                                           // "$" - at end of line
+                searchCriteria = searchCriteria.substring(0, searchCriteria.length - 1)
+            }
+
+            // ... strip out extraneous spaces, and...
+            while (searchCriteria.search("  ") > 0)
+            {
+                searchCriteria = searchCriteria.replace("  ", " ")
+            }
+
+            // ... strip out quote characters because 1) they were purged
+            // from the JimRadio database at load-time, and 2) they are
+            // generally problematic.
+
+            // Single quotes:
+            while (searchCriteria.search("'") > -1) {
+                searchCriteria = searchCriteria.replace("'", "")
+            }
+
+            // Double quotes:
+            while (searchCriteria.search('"') > -1) {
+                searchCriteria = searchCriteria.replace('"', '')
+            }
+
+            // Now turn the comma into a token, and...
+            while (searchCriteria.search(", ") > 0)
+            {
+                searchCriteria = searchCriteria.replace(", ", ",")
+            }
+
+            // ...replace spaces with plus signs, and...
+            while (searchCriteria.search(" ") > 0)
+            {
+                searchCriteria = searchCriteria.replace(" ", "+")
+            }
+
+            // ...load the search criteria into an array of titles:
+            titles = searchCriteria.split(",");
+
+            for (i = 0; i < titles.length; i++)
+            {
+                // Build the query string.  NOTE:  The format is:
+                // Video?titles[0]=bent&titles[1]=zero
+                // and...
+
+                // ... append it to the final URL:
+                controllerCallUrl +=
+                    queryStringPrefix + "titles[" + i.valueOf().toString() + "]=" + titles[i];
+
+                // Prep/increment for the next time through:
+                queryStringPrefix = "&";
+            }
+        }
+        
+        // Go to the fully constructed link, a Controller call:
+        location.href = controllerCallUrl; ; }
+
+    function ButtonPlay_onclick() {
+        
+        // NOTE, Part 2 of 2: This hidden hyperlink, whose URL (href) can be set simply by strings,
+        // serves as my work-around for the problem described above.
+
+        // Dynamically construct the appropriate URL to play the desired songs:
+        var PLAY_URL = document.getElementById("PlayButtonURL").href =
+            "@WebConfigurationManager.AppSettings["JIMRADIO_VIDEO_PLAY_URL_PREFIX"]";
+            
+        var play_URL_arguments = "";
+        var play_URL_arguments = "";
+
+        var play_URL_arguments = "";
+
+
+        var URL_argument_char = "?";
+
+        //-----------------------------------------------------------------------------------------------
+        // GUI:  Determine what JimRadio music content criteria the user selected:
+        //
+        // PART 1 of 4:  Radio Stations selected:
+
+        // Each "station" has 2 elements that we care about...
+        // ... 1) whether or not the checkbox was checked:
+        var checkbox = getElementsByType(top.document.getElementsByTagName('input'), "checkbox");
+        // ... 2) what is the link's location, especially it's arguments:
+        var youtube_id = getElementsByType(top.document.getElementsByTagName("item.youtube_id"));
+
+        var tblLang = document.getElementById("ResultsTable");
+        var tblrows = tblLang.rows;
+
+        // Init:
+        var urlSizeBasedCounter = 0;
+        var URL_SIZE_BASED_MAXIMUM = 135; // NOTE: trial and error determined this number
+
+        // Determine what checkboxes were checked:
+        for (i = 0; i < checkbox.length; i++) {
+
+            if (checkbox[i].checked == true) {
+
+                // Increment:
+                urlSizeBasedCounter++;
+
+                // Since we are passing the selected videos by way of URL arguments,
+                // we have to be aware of the maximum allowed size:
+                if (urlSizeBasedCounter <= URL_SIZE_BASED_MAXIMUM) {
+
+                    // Get info:
+                    var tblcells = tblrows[i + 1].cells;
+                    var innerhtml = tblcells[1].innerHTML;
+
+                    // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+                    // NOTE: I'm unable to access the value of the cell by way of the DOM (which comes back
+                    // as "undefined.")  Instead, I have to go through the following "inner HTML" tedious
+                    // histrionics:
+                    //
+                    // To make matters worse, different browsers return different results, as follows:
+                    // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+                    // Chrome:
+                    // <input id="item_youtube_id" name="item.youtube_id" type="hidden" value="9cjZ3SpAkW4">
+                    // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+                    // Internet Explorer, Mozilla and Netscape:
+                    // <INPUT id=item_youtube_id value=9cjZ3SpAkW4 type=hidden name=item.youtube_id>
+                    // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+                    // Step 1, strip out double quotes.  This will make the two InnerHTML results, above,
+                    // the same, except for the order of the elements:
+                    while (innerhtml.search('"') > 0) {
+                        innerhtml = innerhtml.replace('"', '')
+                    }
+
+                    // Set the appropriate argument prefix character:
+                    play_URL_arguments += URL_argument_char;
+
+                    // Concatenate the argument:
+                    play_URL_arguments += 'id=' + innerhtml.substring(innerhtml.indexOf('value=') + 6,
+
+                        // Step 2, determine the location of the value in the string:
+                        Math.min(
+
+                            // Handle Internet Explorer, et al, which are terminated by a space:
+                            innerhtml.indexOf(' ', innerhtml.indexOf('value=') + 6),
+                    
+                            // Handle Chrome, which is terminated by the closing bracket:
+                            innerhtml.indexOf('>', innerhtml.indexOf('value=') + 6))                        
+                    );
+
+                    // Prep for next  usage:
+                    if (URL_argument_char == "?") { URL_argument_char = "&" }
+                }
+            }
+        }
+
+        //-----------------------------------------------------------------------------------------------
+        // Open the JimRadio video player in a new tab and play the selected videos:
+        window.open(PLAY_URL + play_URL_arguments, '_blank');
+    }
+    
+    // Thanks to samliew, HHC Moderator at www.htmlhelpcentral.com/messageboard/ for
+    // http://www.htmlhelpcentral.com/messageboard/showthread.php?17104-check-boxes
+    // and function getElementsByType(array, type):
+
+    // NOTE: We are going to use this to handle all the station checkboxes in one
+    // handy array:
+    function getElementsByType(array, type) {
+        var result = new Array();
+
+        for (i = 0; i < array.length; i++) {
+            if (array[i].type == type) { result.push(array[i]); }
+        }
+
+        return result;
+    }
+
+    function ButtonSelectAll_onclick() {
+
+        // Toggle between two states:  no checkboxes checked, all checkboxes checked
+
+        // Get references:
+        var checkbox = getElementsByType(top.document.getElementsByTagName('input'), "checkbox");
+
+        // For each checkbox:
+        for (i = 0; i < checkbox.length; i++) {
+
+            // Set its value, effectively toggling it:
+            if (selectAll == 'N') {
+                checkbox[i].checked = true }
+            else {
+                checkbox[i].checked = false }
+        }
+        
+        // Toggle the state-management variable:
+        if (selectAll == 'N') {
+            selectAll = 'Y' }
+         else {
+             selectAll = 'N' }
+    }
+
+</script>
+<table id="ResultsTable">
+    <tr>
+        <th>
+        </th>
+        <th>
+        </th>
+        <th>
+        </th>
+        <th>
+            Title
+        </th>
+        <th>
+            Duration
+        </th>
+        <th>
+            Genre
+        </th>
+        <th>
+            Rating
+        </th>
+        <th>
+            Play Error
+        </th>
+        <th>
+        </th>
+    </tr>
+    @{
+        // NOTE: This is a performance-tuning mechanism:
+        int IMAGE_SUPPRESSION_THRESHOLD;
+
+        // - - - - - - - - - - - - - - - - - - - - - - - -
+        // Show all images, with no suppression:
+        //IMAGE_SUPPRESSION_THRESHOLD = int.MaxValue;
+        // - - - - - - - - - - - - - - - - - - - - - - - -    
+        // Suppress:
+        IMAGE_SUPPRESSION_THRESHOLD = 1000;
+        // - - - - - - - - - - - - - - - - - - - - - - - -
+
+        // Get the size of the result set:
+        int modelCount = @Model.Count();
+    }
+    @foreach (var item in Model)
+    {
+        <tr>
+            <td>
+               @{  
+                    string videoIcon = "/JimRadioMaint/Images/dummy.jpg";
+
+                    if (@modelCount < IMAGE_SUPPRESSION_THRESHOLD)
+                    {
+                        // NOTE: This is an attempt to prevent 404 (Not Found) errors.
+                        // However, we will be stuck with generating some, because we
+                        // never fully know what videos are still available.
+
+                        // NOTE 2: I have tested pre-checking for the existence of these
+                        // files, but it gives very slow performance.
+
+                        if (item.play_error != 100)
+                        {
+                            // If the video was not removed:
+                            videoIcon = @WebConfigurationManager.AppSettings["YOUTUBE_IMAGE_URL_PREFIX"] +
+                                @Html.DisplayFor(modelItem => item.youtube_id) + "/1.jpg";
+                        }
+                    }                
+                }
+
+                <img alt="YouTube's image for this video." src="@videoIcon" height="40" width="40" />
+            </td>
+
+            <td>
+                @Html.HiddenFor(modelItem => item.youtube_id)
+            </td>
+
+            <td>
+                @Html.CheckBox("is_selected")
+            </td>
+
+            <td>
+                <a href="@Url.Content(VideoHelper.VideoPlayUrl(@Html.DisplayFor(modelItem => item.youtube_id).ToHtmlString()))"
+                   target="_blank">
+
+                   @Html.DisplayFor(modelItem => item.youtube_title)
+                </a>
+                <br />
+            </td>
+
+            <td>
+                @VideoHelper.DurationMinutesSeconds(item.duration_seconds)
+            </td>
+
+            <td>                               
+                <img alt="Genres such as rock, pop, etc." src= "/JimRadioMaint/Images/@ViewBag.dictionaryGenreIcon[item.genre]"/>
+            </td>
+
+            <td> 
+                <img alt="1, 2, or 3 stars." src= "/JimRadioMaint/Images/@ViewBag.dictionaryRatingIcon[item.rating.ToString()]"/>
+            </td>
+ 
+            <td>
+
+                @{                
+                    string playErrorIcon = "dummy.jpg";
+
+                    if (item.play_error != null)
+                    {
+                        try
+                        {
+                            // If we have an icon for this error code, show it...
+                            playErrorIcon = ViewBag.dictionaryPlayErrorIcon[item.play_error.ToString()];
+
+                            <img alt="Video play errors such as NOT FOUND." src="/JimRadioMaint/Images/@playErrorIcon" />
+                        }
+                        catch (Exception)
+                        {
+                            // ...otherwise, show the numeric value of the error code:
+                            @Html.DisplayFor(modelItem => item.play_error)
+                        }
+
+                    }
+                }
+            </td>
+
+            <td>
+                @Html.ActionLink("Edit", "Edit", new { id = item.id }) |
+                @Html.ActionLink("Delete", "Delete", new { id = item.id })
+            </td>
+        </tr>}
+</table>
